@@ -181,21 +181,29 @@ class InstagramClient:
         try:
             response = self.session.get(url, headers=headers, params=params, timeout=30)
             
+            logger.debug(f"API request to {endpoint}: {response.status_code}")
+            
             if response.status_code == 200:
                 return response.json()
             elif response.status_code == 400:
                 try:
                     data = response.json()
+                    logger.error(f"API 400 error: {data}")
                     raise InstagramError(data.get("message", "Bad request"), 400)
                 except json.JSONDecodeError:
+                    logger.error(f"API 400 error (non-JSON): {response.text[:200]}")
                     raise InstagramError(f"Bad request: {response.text[:200]}", 400)
             elif response.status_code == 401:
+                logger.error("API 401 - Session expired")
                 raise InstagramError("Session expired - please update session credentials", 401)
             elif response.status_code == 404:
+                logger.warning(f"API 404 for {endpoint}")
                 raise InstagramError("Not found", 404)
             elif response.status_code == 429:
+                logger.warning("API 429 - Rate limited")
                 raise InstagramError("Rate limited - please wait before trying again", 429)
             else:
+                logger.error(f"API error {response.status_code}: {response.text[:200]}")
                 raise InstagramError(f"Request failed with status {response.status_code}", response.status_code)
                 
         except requests.exceptions.Timeout:
@@ -208,15 +216,57 @@ class InstagramClient:
     def get_user_id(self, username: str) -> str:
         """Get user ID from username."""
         username = username.lower().strip().lstrip("@")
-        result = self._request(f"users/{username}/usernameinfo/")
-        if result.get("user"):
-            return str(result["user"]["pk"])
-        raise InstagramError("User not found", 404)
+        
+        # Try the mobile API first
+        try:
+            result = self._request(f"users/{username}/usernameinfo/")
+            if result.get("user"):
+                return str(result["user"]["pk"])
+        except InstagramError as e:
+            logger.warning(f"Mobile API failed for {username}: {e.message}, trying web API...")
+        
+        # Fallback to web API (GraphQL)
+        try:
+            return self._get_user_id_web(username)
+        except Exception as e:
+            logger.error(f"Web API also failed for {username}: {e}")
+            raise InstagramError(f"User '{username}' not found. Please check the username or update session credentials.", 404)
+    
+    def _get_user_id_web(self, username: str) -> str:
+        """Get user ID using Instagram's web API as fallback."""
+        url = f"https://www.instagram.com/api/v1/users/web_profile_info/?username={username}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "X-CSRFToken": Config.CSRF_TOKEN,
+            "X-IG-App-ID": "936619743392459",
+            "X-ASBD-ID": "129477",
+            "X-IG-WWW-Claim": "0",
+            "X-Requested-With": "XMLHttpRequest",
+            "Referer": f"https://www.instagram.com/{username}/",
+            "Origin": "https://www.instagram.com",
+        }
+        
+        response = self.session.get(url, headers=headers, timeout=30)
+        
+        if response.status_code == 200:
+            data = response.json()
+            user = data.get("data", {}).get("user")
+            if user:
+                return str(user["id"])
+        
+        logger.error(f"Web API response: {response.status_code} - {response.text[:200]}")
+        raise InstagramError(f"User '{username}' not found", 404)
     
     def get_user_info(self, user_id: str) -> dict:
         """Get user information."""
-        result = self._request(f"users/{user_id}/info/")
-        return result.get("user", {})
+        try:
+            result = self._request(f"users/{user_id}/info/")
+            return result.get("user", {})
+        except InstagramError as e:
+            logger.warning(f"Failed to get user info for {user_id}: {e.message}")
+            return {}
     
     def get_user_stories(self, user_id: str) -> List[dict]:
         """Get stories for a user."""
