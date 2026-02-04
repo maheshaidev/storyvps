@@ -36,16 +36,16 @@ class Config:
     # Instagram credentials (REQUIRED)
     IG_SESSION_ID = os.environ.get(
         'IG_SESSION_ID',
-        '80410807926%3AJqTbrkubzZAGXq%3A27%3AAYjgTmevDqV0b62fRe8BcRzeDHb_D31x_nlzNvX1RA'
+        '77324371441%3AMCR5MfzAs0bQhk%3A7%3AAYgxTflIZ12W7vNmF8eL35h7mW6d8NIrVBSuXPScYg'
     )
-    IG_DS_USER_ID = os.environ.get('IG_DS_USER_ID', '80410807926')
-    IG_CSRF_TOKEN = os.environ.get('IG_CSRF_TOKEN', 'hCMHXBafi44eyeWhQ2H6YFQBU2QOwE7w')
+    IG_DS_USER_ID = os.environ.get('IG_DS_USER_ID', '77324371441')
+    IG_CSRF_TOKEN = os.environ.get('IG_CSRF_TOKEN', 'PG4aGAmOzu1yndQ0munYdyMglYacQ9aV')
     
     # Instagram credentials (OPTIONAL)
-    IG_MID = os.environ.get('IG_MID', 'aWFBJAALAAHRt-UXxVOknqgoxntT')
-    IG_DATR = os.environ.get('IG_DATR', 'est5aZkSWaly1AZy49xETXA0')
-    IG_DID = os.environ.get('IG_DID', '6A87B787-6286-49C1-92F9-B33A43F43A19')
-    IG_RUR = os.environ.get('IG_RUR', '"LDC\\05480410807926\\0541801772719:01fe598b5ab7ea32d63c24dce75bc38a9fe52719df511b1b8bc59befa02a1af616d3308a"')
+    IG_MID = os.environ.get('IG_MID', 'aOt29QALAAGloD2cM5VvBLCE08M-')
+    IG_DATR = os.environ.get('IG_DATR', 'R0vOaEsiI_6PRjVJumOng2PI')
+    IG_DID = os.environ.get('IG_DID', 'F50A89C7-C2C1-465D-8798-461876A23509')
+    IG_RUR = os.environ.get('IG_RUR', '"CLN\\05477324371441\\0541801774803:01fe51fa6648eebe1d4a65c33d09c636233cee77ff81f70fd9f91f6bbeb3201d8beb337a"')
     
     # Rate limiting
     RATELIMIT_DEFAULT = os.environ.get('RATELIMIT_DEFAULT', '100 per hour')
