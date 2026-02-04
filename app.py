@@ -221,26 +221,49 @@ class InstagramClient:
             raise InstagramError(f"Request failed: {str(e)}", 500)
     
     def get_user_id(self, username: str) -> str:
-        """Get user ID from username."""
+        """Get user ID from username using multiple methods."""
         username = username.lower().strip().lstrip("@")
         
-        # Try the mobile API first
+        # Method 1: Try the mobile API
         try:
             result = self._request(f"users/{username}/usernameinfo/")
             if result.get("user"):
+                logger.info(f"Found user {username} via mobile API")
                 return str(result["user"]["pk"])
         except InstagramError as e:
-            logger.warning(f"Mobile API failed for {username}: {e.message}, trying web API...")
+            logger.warning(f"Mobile API failed for {username}: {e.message}")
         
-        # Fallback to web API (GraphQL)
+        # Method 2: Try web_profile_info API
         try:
-            return self._get_user_id_web(username)
+            user_id = self._get_user_id_web_profile(username)
+            if user_id:
+                logger.info(f"Found user {username} via web_profile_info API")
+                return user_id
         except Exception as e:
-            logger.error(f"Web API also failed for {username}: {e}")
-            raise InstagramError(f"User '{username}' not found. Please check the username or update session credentials.", 404)
+            logger.warning(f"web_profile_info API failed for {username}: {e}")
+        
+        # Method 3: Try scraping the profile page
+        try:
+            user_id = self._get_user_id_from_page(username)
+            if user_id:
+                logger.info(f"Found user {username} via page scraping")
+                return user_id
+        except Exception as e:
+            logger.warning(f"Page scraping failed for {username}: {e}")
+        
+        # Method 4: Try the search API
+        try:
+            user_id = self._get_user_id_search(username)
+            if user_id:
+                logger.info(f"Found user {username} via search API")
+                return user_id
+        except Exception as e:
+            logger.warning(f"Search API failed for {username}: {e}")
+        
+        raise InstagramError(f"User '{username}' not found. Please check the username.", 404)
     
-    def _get_user_id_web(self, username: str) -> str:
-        """Get user ID using Instagram's web API as fallback."""
+    def _get_user_id_web_profile(self, username: str) -> Optional[str]:
+        """Get user ID using Instagram's web_profile_info API."""
         url = f"https://www.instagram.com/api/v1/users/web_profile_info/?username={username}"
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -256,15 +279,78 @@ class InstagramClient:
         }
         
         response = self.session.get(url, headers=headers, timeout=30)
+        logger.debug(f"web_profile_info response: {response.status_code}")
         
         if response.status_code == 200:
             data = response.json()
             user = data.get("data", {}).get("user")
             if user:
                 return str(user["id"])
+        return None
+    
+    def _get_user_id_from_page(self, username: str) -> Optional[str]:
+        """Get user ID by scraping the profile page for embedded data."""
+        import re
         
-        logger.error(f"Web API response: {response.status_code} - {response.text[:200]}")
-        raise InstagramError(f"User '{username}' not found", 404)
+        url = f"https://www.instagram.com/{username}/"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        
+        response = self.session.get(url, headers=headers, timeout=30)
+        logger.debug(f"Profile page response: {response.status_code}")
+        
+        if response.status_code == 200:
+            # Try to find user ID in the page content
+            # Pattern 1: "profilePage_<user_id>"
+            match = re.search(r'"profilePage_(\d+)"', response.text)
+            if match:
+                return match.group(1)
+            
+            # Pattern 2: "user_id":"<user_id>"
+            match = re.search(r'"user_id"\s*:\s*"(\d+)"', response.text)
+            if match:
+                return match.group(1)
+            
+            # Pattern 3: {"id":"<user_id>"
+            match = re.search(r'\{"id"\s*:\s*"(\d+)"[^}]*"username"\s*:\s*"' + re.escape(username) + '"', response.text)
+            if match:
+                return match.group(1)
+                
+            # Pattern 4: data-id or similar attributes
+            match = re.search(r'data-(?:user-)?id="(\d+)"', response.text)
+            if match:
+                return match.group(1)
+        
+        return None
+    
+    def _get_user_id_search(self, username: str) -> Optional[str]:
+        """Get user ID using Instagram's search API."""
+        url = f"https://www.instagram.com/web/search/topsearch/?query={username}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "X-CSRFToken": Config.CSRF_TOKEN,
+            "X-IG-App-ID": "936619743392459",
+            "X-Requested-With": "XMLHttpRequest",
+            "Referer": "https://www.instagram.com/",
+        }
+        
+        response = self.session.get(url, headers=headers, timeout=30)
+        logger.debug(f"Search API response: {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            users = data.get("users", [])
+            for user_data in users:
+                user = user_data.get("user", {})
+                if user.get("username", "").lower() == username.lower():
+                    return str(user["pk"])
+        
+        return None
     
     def get_user_info(self, user_id: str) -> dict:
         """Get user information."""
