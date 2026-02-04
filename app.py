@@ -131,6 +131,15 @@ class InstagramClient:
         self.session.mount("https://", adapter)
         self.session.mount("http://", adapter)
         
+        # Log cookie status for debugging
+        logger.info("=" * 50)
+        logger.info("Setting up Instagram session cookies:")
+        logger.info(f"  SESSION_ID: {'SET (' + Config.SESSION_ID[:20] + '...)' if Config.SESSION_ID else 'NOT SET'}")
+        logger.info(f"  DS_USER_ID: {Config.DS_USER_ID if Config.DS_USER_ID else 'NOT SET'}")
+        logger.info(f"  CSRF_TOKEN: {'SET' if Config.CSRF_TOKEN else 'NOT SET'}")
+        logger.info(f"  MID: {'SET' if Config.MID else 'NOT SET'}")
+        logger.info("=" * 50)
+        
         # Set cookies
         if Config.SESSION_ID:
             self.session.cookies.set("sessionid", Config.SESSION_ID, domain=".instagram.com")
@@ -604,6 +613,66 @@ def health_check():
         "timestamp": datetime.utcnow().isoformat(),
         "credentials_configured": Config.validate()
     })
+
+
+@app.route('/api/debug', methods=['GET'])
+def debug_session():
+    """Debug endpoint to test Instagram session."""
+    client = get_client()
+    
+    debug_info = {
+        "credentials": {
+            "session_id_set": bool(Config.SESSION_ID),
+            "session_id_preview": Config.SESSION_ID[:20] + "..." if Config.SESSION_ID else None,
+            "ds_user_id": Config.DS_USER_ID,
+            "csrf_token_set": bool(Config.CSRF_TOKEN),
+            "mid_set": bool(Config.MID),
+        },
+        "api_domain": Config.API_DOMAIN,
+        "cookies_in_session": list(client.session.cookies.keys()),
+    }
+    
+    # Test API by checking own user info
+    try:
+        if Config.DS_USER_ID:
+            result = client._request(f"users/{Config.DS_USER_ID}/info/")
+            debug_info["session_test"] = {
+                "status": "SUCCESS",
+                "logged_in_as": result.get("user", {}).get("username", "unknown"),
+                "full_name": result.get("user", {}).get("full_name", ""),
+            }
+        else:
+            debug_info["session_test"] = {"status": "NO_USER_ID", "message": "DS_USER_ID not set"}
+    except InstagramError as e:
+        debug_info["session_test"] = {
+            "status": "FAILED",
+            "error": e.message,
+            "status_code": e.status_code
+        }
+    except Exception as e:
+        debug_info["session_test"] = {
+            "status": "ERROR",
+            "error": str(e)
+        }
+    
+    # Test username lookup
+    test_username = request.args.get('test_user', 'instagram')
+    try:
+        user_id = client.get_user_id(test_username)
+        debug_info["username_lookup_test"] = {
+            "status": "SUCCESS",
+            "username": test_username,
+            "user_id": user_id
+        }
+    except InstagramError as e:
+        debug_info["username_lookup_test"] = {
+            "status": "FAILED",
+            "username": test_username,
+            "error": e.message,
+            "status_code": e.status_code
+        }
+    
+    return jsonify(debug_info)
 
 
 @app.route('/api/reset', methods=['POST'])
