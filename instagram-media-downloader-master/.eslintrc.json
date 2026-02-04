@@ -1,0 +1,40 @@
+{
+  "extends": ["next/core-web-vitals", "plugin:prettier/recommended"],
+  "plugins": ["simple-import-sort"],
+  "rules": {
+    "import/no-anonymous-default-export": "off",
+    "@next/next/no-img-element": "off",
+    "react-hooks/exhaustive-deps": "off",
+    "simple-import-sort/imports": "error",
+    "simple-import-sort/exports": "error"
+  },
+  "overrides": [
+    {
+      "files": ["*.ts", "*.tsx"],
+      "rules": {
+        "simple-import-sort/imports": [
+          "error",
+          {
+            "groups": [
+              ["^react"],
+              ["^next"],
+              ["^@?\\w"],
+              ["^(@/constants)(/.*|$)"],
+              ["^(@/data)(/.*|$)"],
+              ["^(@/hooks)(/.*|$)"],
+              ["^(@/assets/icons)(/.*|$)"],
+              ["^(@/assets/images)(/.*|$)"],
+              ["^(@/services)(/.*|$)"],
+              ["^(@/store)(/.*|$)"],
+              ["^(@/components)(/.*|$)"],
+              ["^\\u0000"],
+              ["^\\.\\.(?!/?$)", "^\\.\\./?$"],
+              ["^\\./(?=.*/)(?!/?$)", "^\\.(?!/?$)", "^\\./?$"],
+              ["^.+\\.?(scss)$"]
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

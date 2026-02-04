@@ -157,7 +157,8 @@ class InstagramClient:
     def _get_headers(self) -> dict:
         """Get headers for Instagram API requests."""
         return {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            # Use Instagram Android app User-Agent (more permissive)
+            "User-Agent": "Mozilla/5.0 (Linux; Android 9; GM1903 Build/PKQ1.190110.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/75.0.3770.143 Mobile Safari/537.36 Instagram 103.1.0.15.119 Android (28/9; 420dpi; 1080x2260; OnePlus; GM1903; OnePlus7; qcom; sv_SE; 164094539)",
             "Accept": "*/*",
             "Accept-Language": "en-US,en;q=0.9",
             "Accept-Encoding": "gzip, deflate, br",
@@ -171,9 +172,6 @@ class InstagramClient:
             "Sec-Fetch-Dest": "empty",
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Site": "same-site",
-            "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-            "Sec-Ch-Ua-Mobile": "?0",
-            "Sec-Ch-Ua-Platform": '"Windows"',
             "Connection": "keep-alive",
         }
     
@@ -224,25 +222,7 @@ class InstagramClient:
         """Get user ID from username using multiple methods."""
         username = username.lower().strip().lstrip("@")
         
-        # Method 1: Try the mobile API
-        try:
-            result = self._request(f"users/{username}/usernameinfo/")
-            if result.get("user"):
-                logger.info(f"Found user {username} via mobile API")
-                return str(result["user"]["pk"])
-        except InstagramError as e:
-            logger.warning(f"Mobile API failed for {username}: {e.message}")
-        
-        # Method 2: Try web_profile_info API
-        try:
-            user_id = self._get_user_id_web_profile(username)
-            if user_id:
-                logger.info(f"Found user {username} via web_profile_info API")
-                return user_id
-        except Exception as e:
-            logger.warning(f"web_profile_info API failed for {username}: {e}")
-        
-        # Method 3: Try scraping the profile page
+        # Method 1: Try scraping the profile page first (most reliable per Next.js app)
         try:
             user_id = self._get_user_id_from_page(username)
             if user_id:
@@ -250,6 +230,24 @@ class InstagramClient:
                 return user_id
         except Exception as e:
             logger.warning(f"Page scraping failed for {username}: {e}")
+        
+        # Method 2: Try GraphQL search API (from Next.js app - very reliable)
+        try:
+            user_id = self._get_user_id_graphql(username)
+            if user_id:
+                logger.info(f"Found user {username} via GraphQL API")
+                return user_id
+        except Exception as e:
+            logger.warning(f"GraphQL API failed for {username}: {e}")
+        
+        # Method 3: Try web_profile_info API
+        try:
+            user_id = self._get_user_id_web_profile(username)
+            if user_id:
+                logger.info(f"Found user {username} via web_profile_info API")
+                return user_id
+        except Exception as e:
+            logger.warning(f"web_profile_info API failed for {username}: {e}")
         
         # Method 4: Try the search API
         try:
@@ -260,13 +258,69 @@ class InstagramClient:
         except Exception as e:
             logger.warning(f"Search API failed for {username}: {e}")
         
+        # Method 5: Try the mobile API (often blocked)
+        try:
+            result = self._request(f"users/{username}/usernameinfo/")
+            if result.get("user"):
+                logger.info(f"Found user {username} via mobile API")
+                return str(result["user"]["pk"])
+        except InstagramError as e:
+            logger.warning(f"Mobile API failed for {username}: {e.message}")
+        
         raise InstagramError(f"User '{username}' not found. Please check the username.", 404)
+    
+    def _get_user_id_graphql(self, username: str) -> Optional[str]:
+        """Get user ID using Instagram's GraphQL search API (from Next.js app)."""
+        import urllib.parse
+        
+        url = "https://www.instagram.com/graphql/query"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+            "Accept": "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "X-IG-App-ID": "936619743392459",
+            "X-CSRFToken": Config.CSRF_TOKEN,
+            "X-FB-Friendly-Name": "PolarisSearchBoxRefetchableQuery",
+            "X-Requested-With": "XMLHttpRequest",
+            "Origin": "https://www.instagram.com",
+            "Referer": "https://www.instagram.com/",
+        }
+        
+        data = {
+            "av": "17841461911219001",
+            "__d": "www",
+            "variables": json.dumps({
+                "data": {
+                    "context": "blended",
+                    "include_reel": "true",
+                    "query": username.strip(),
+                    "rank_token": "",
+                    "search_surface": "web_top_search",
+                },
+                "hasQuery": True,
+            }),
+            "doc_id": "9153895011291216",
+        }
+        
+        response = self.session.post(url, headers=headers, data=data, timeout=30)
+        logger.debug(f"GraphQL API response: {response.status_code}")
+        
+        if response.status_code == 200:
+            result = response.json()
+            users = result.get("data", {}).get("xdt_api__v1__fbsearch__topsearch_connection", {}).get("users", [])
+            for user_data in users:
+                user = user_data.get("user", {})
+                if user.get("username", "").lower() == username.lower():
+                    return str(user["id"])
+        
+        return None
     
     def _get_user_id_web_profile(self, username: str) -> Optional[str]:
         """Get user ID using Instagram's web_profile_info API."""
         url = f"https://www.instagram.com/api/v1/users/web_profile_info/?username={username}"
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Linux; Android 9; GM1903 Build/PKQ1.190110.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/75.0.3770.143 Mobile Safari/537.36 Instagram 103.1.0.15.119 Android (28/9; 420dpi; 1080x2260; OnePlus; GM1903; OnePlus7; qcom; sv_SE; 164094539)",
             "Accept": "*/*",
             "Accept-Language": "en-US,en;q=0.9",
             "X-CSRFToken": Config.CSRF_TOKEN,
@@ -328,9 +382,9 @@ class InstagramClient:
     
     def _get_user_id_search(self, username: str) -> Optional[str]:
         """Get user ID using Instagram's search API."""
-        url = f"https://www.instagram.com/web/search/topsearch/?query={username}"
+        url = f"https://www.instagram.com/web/search/topsearch/?query={username}&context=blended&rank_token=0.3953592318270893&count=1"
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Linux; Android 9; GM1903 Build/PKQ1.190110.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/75.0.3770.143 Mobile Safari/537.36 Instagram 103.1.0.15.119 Android (28/9; 420dpi; 1080x2260; OnePlus; GM1903; OnePlus7; qcom; sv_SE; 164094539)",
             "Accept": "*/*",
             "Accept-Language": "en-US,en;q=0.9",
             "X-CSRFToken": Config.CSRF_TOKEN,

@@ -1,0 +1,65 @@
+.container {
+  display: flex;
+}
+
+.gallery {
+  border-bottom: 1px solid #ddd;
+  margin-bottom: 4px;
+
+  &:last-of-type {
+    border-bottom: 0;
+  }
+}
+
+.index {
+  font-size: 18px;
+  margin-right: 12px;
+  display: none;
+  min-width: 30px;
+
+  @media (min-width: 768px) {
+    display: inline;
+  }
+}
+
+.image,
+.video {
+  position: relative;
+  display: inline-block;
+}
+
+.hasVideo {
+  @media (min-width: 768px) {
+    margin-left: 6px;
+  }
+}
+
+.icon {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  color: #b7dde9;
+  font-size: 22px;
+}
+
+.loader {
+  margin-top: 12px;
+  margin-bottom: 12px;
+  width: 48px;
+  height: 48px;
+  border: 5px solid #3498db;
+  border-bottom-color: transparent;
+  border-radius: 50%;
+  display: inline-block;
+  box-sizing: border-box;
+  animation: rotation 1s linear infinite;
+}
+
+@keyframes rotation {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
