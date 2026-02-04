@@ -54,38 +54,36 @@ else:
     logger.warning("flask-limiter not installed. Rate limiting disabled.")
 
 # ============== Configuration ==============
+# Import config from config.py (which has the actual credentials)
+from config import Config as AppConfig
+
 class Config:
-    """Application configuration from environment variables."""
+    """Application configuration - wrapper around config.py settings."""
     
     # Instagram API
-    API_DOMAIN = os.environ.get("IG_API_DOMAIN", "i.instagram.com")
+    API_DOMAIN = AppConfig.IG_API_DOMAIN
     
-    # Session credentials (MUST be set via environment variables in production)
-    SESSION_ID = os.environ.get("IG_SESSION_ID", "")
-    DS_USER_ID = os.environ.get("IG_DS_USER_ID", "")
-    CSRF_TOKEN = os.environ.get("IG_CSRF_TOKEN", "")
-    MID = os.environ.get("IG_MID", "")
+    # Session credentials
+    SESSION_ID = AppConfig.IG_SESSION_ID
+    DS_USER_ID = AppConfig.IG_DS_USER_ID
+    CSRF_TOKEN = AppConfig.IG_CSRF_TOKEN
+    MID = AppConfig.IG_MID
     
     # Optional cookies
-    DATR = os.environ.get("IG_DATR", "")
-    DID = os.environ.get("IG_DID", "")
-    RUR = os.environ.get("IG_RUR", "")
+    DATR = AppConfig.IG_DATR
+    DID = AppConfig.IG_DID
+    RUR = AppConfig.IG_RUR
     
     # Server settings
-    HOST = os.environ.get("HOST", "0.0.0.0")
-    PORT = int(os.environ.get("PORT", 5000))
-    DEBUG = os.environ.get("DEBUG", "false").lower() == "true"
+    HOST = AppConfig.HOST
+    PORT = AppConfig.PORT
+    DEBUG = AppConfig.DEBUG
     
     # Security
-    SECRET_KEY = os.environ.get("SECRET_KEY", str(uuid.uuid4()))
+    SECRET_KEY = AppConfig.SECRET_KEY
     
     # Allowed domains for download proxy (security)
-    ALLOWED_DOWNLOAD_DOMAINS = [
-        "instagram.com",
-        "cdninstagram.com",
-        "fbcdn.net",
-        "instagram.fcdn.net"
-    ]
+    ALLOWED_DOWNLOAD_DOMAINS = AppConfig.ALLOWED_DOWNLOAD_DOMAINS
     
     @classmethod
     def validate(cls) -> bool:
